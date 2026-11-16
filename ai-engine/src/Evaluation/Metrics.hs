@@ -19,10 +19,17 @@ module Evaluation.Metrics
     , preverBaselineRegras
     , avaliarBaselineRegistros
     , compararComBaseline
+    , IndicadoresRecomendacao(..)
+    , calcularAdequacaoPedagogica
+    , calcularDiversidadeRecomendacoes
+    , calcularTaxaAceitacao
+    , calcularEvolucaoObservada
+    , avaliarSistemaRecomendacao
     ) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.List (foldl', maximumBy)
+import qualified Data.Map.Strict as Map
 import Data.Ord (comparing)
 import Data.Preprocessing
     ( ConjuntosPreparados(..)
@@ -31,9 +38,11 @@ import Data.Preprocessing
     , dividirPorEstudante
     , prepararConjuntosTreino
     )
-import Data.Types (AmostraTreino(..))
+import qualified Data.Set as Set
+import Data.Types (AmostraTreino(..), Conteudo, Recomendacao(..))
 import GHC.Generics (Generic)
 import Models.LogisticRegression (ModeloLogistico(..), perdaMedia, prever)
+import Recommendation.Prerequisites (GrafoDependencias, todosPreRequisitosPendentes)
 import Recommendation.Scoring (LimiaresRecomendacao(..))
 
 data MatrizConfusao = MatrizConfusao
@@ -83,6 +92,18 @@ data ComparativoBaseline = ComparativoBaseline
 
 instance ToJSON ComparativoBaseline
 instance FromJSON ComparativoBaseline
+
+data IndicadoresRecomendacao = IndicadoresRecomendacao
+    { relevanciaDocenteMedia   :: Double
+    , adequacaoPedagogica      :: Double
+    , diversidadeRecomendacoes :: Double
+    , taxaRecomendacoesAceitas :: Double
+    , evolucaoMediaObservada   :: Double
+    , observacaoMetodologica   :: String
+    } deriving (Show, Eq, Generic)
+
+instance ToJSON IndicadoresRecomendacao
+instance FromJSON IndicadoresRecomendacao
 
 calcularMatrizConfusao :: Double -> [(Double, Double)] -> MatrizConfusao
 calcularMatrizConfusao limiar = foldl' contar (MatrizConfusao 0 0 0 0)
@@ -229,3 +250,69 @@ compararComBaseline limiarML modelo registros =
         , ganhoF1Teste              = f1Score mlTeste - f1Score baseTeste
         , reducaoLogLossTeste       = logLoss baseTeste - logLoss mlTeste
         }
+
+-- | Mede a proporção de recomendações que respeitam a sequência pedagógica e
+-- não sugerem avanço prematuro quando há pré-requisitos ainda não consolidados.
+calcularAdequacaoPedagogica
+    :: GrafoDependencias
+    -> Double
+    -> Map.Map Conteudo Double
+    -> [Recomendacao]
+    -> Double
+calcularAdequacaoPedagogica _ _ _ [] = 0.0
+calcularAdequacaoPedagogica grafo limiarDom mapaProbs recs =
+    fromIntegral (length (filter adequada recs)) / fromIntegral (length recs)
+  where
+    adequada r =
+        let c = conteudoRecomendado r
+            p = probabilidadeDominio r
+            pendentes = todosPreRequisitosPendentes grafo limiarDom mapaProbs c
+            respeitaPrereq =
+                null pendentes
+                    || (tipoAcao r /= "avancar" && (p >= 0.50 || tipoAcao r == "revisar_pre_requisitos"))
+        in p >= 0.0 && p <= 1.0 && respeitaPrereq
+
+-- | Mede a diversidade de conteúdos contemplados na lista de recomendações (0.0 a 1.0).
+calcularDiversidadeRecomendacoes :: [Recomendacao] -> Double
+calcularDiversidadeRecomendacoes [] = 0.0
+calcularDiversidadeRecomendacoes recs =
+    let unicos = Set.size (Set.fromList (map conteudoRecomendado recs))
+    in fromIntegral unicos / fromIntegral (length recs)
+
+-- | Proporção de recomendações aceitas e executadas pelos estudantes.
+calcularTaxaAceitacao :: [Bool] -> Double
+calcularTaxaAceitacao [] = 0.0
+calcularTaxaAceitacao aceites =
+    fromIntegral (length (filter id aceites)) / fromIntegral (length aceites)
+
+-- | Diferença média observada (pós - pré) em avaliações de desempenho.
+-- Deve ser interpretada de forma descritiva, sem inferir causalidade direta isolada.
+calcularEvolucaoObservada :: [(Double, Double)] -> Double
+calcularEvolucaoObservada [] = 0.0
+calcularEvolucaoObservada pares =
+    sum [depois - antes | (antes, depois) <- pares] / fromIntegral (length pares)
+
+avaliarSistemaRecomendacao
+    :: GrafoDependencias
+    -> Double
+    -> Map.Map Conteudo Double
+    -> [Recomendacao]
+    -> [Double]
+    -> [Bool]
+    -> [(Double, Double)]
+    -> IndicadoresRecomendacao
+avaliarSistemaRecomendacao grafo limiarDom mapaProbs recs notasDocentes aceites evolucoes =
+    IndicadoresRecomendacao
+        { relevanciaDocenteMedia   = mediaRelevancia
+        , adequacaoPedagogica      = calcularAdequacaoPedagogica grafo limiarDom mapaProbs recs
+        , diversidadeRecomendacoes = calcularDiversidadeRecomendacoes recs
+        , taxaRecomendacoesAceitas = calcularTaxaAceitacao aceites
+        , evolucaoMediaObservada   = calcularEvolucaoObservada evolucoes
+        , observacaoMetodologica   =
+            "Melhora observada apos recomendacoes e apenas descritiva; nao presume causalidade sem estudo controlado."
+        }
+  where
+    mediaRelevancia =
+        if null notasDocentes
+            then 0.0
+            else sum (map (max 0.0 . min 1.0) notasDocentes) / fromIntegral (length notasDocentes)

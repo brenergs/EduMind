@@ -270,6 +270,45 @@ testeComparacaoBaseline = do
             putStrLn ("  Ganho Acc=" ++ show (ganhoAccuracyTeste cmp) ++ " Ganho F1=" ++ show (ganhoF1Teste cmp) ++ " Reducao LogLoss=" ++ show (reducaoLogLossTeste cmp))
             pure ok
 
+prop_indicadoresRecomendacaoLimites :: Property
+prop_indicadoresRecomendacaoLimites =
+    forAll (vectorOf 4 (choose (0.0, 1.0))) $ \probs ->
+        forAll (choose (1 :: Int, 5)) $ \nAceites ->
+            forAll (vectorOf nAceites (elements [True, False])) $ \aceites ->
+                let mapa = Map.fromList (zip sequenciaPedagogicaPadrao probs)
+                    recs = gerarRecomendacoesOrdenadas limiaresPadrao grafoPadraoMatematica mapa
+                    ind  = avaliarSistemaRecomendacao grafoPadraoMatematica 0.75 mapa recs [0.9, 0.8] aceites [(50.0, 72.0)]
+                in adequacaoPedagogica ind >= 0.0 && adequacaoPedagogica ind <= 1.0
+                    && diversidadeRecomendacoes ind >= 0.0 && diversidadeRecomendacoes ind <= 1.0
+                    && taxaRecomendacoesAceitas ind >= 0.0 && taxaRecomendacoesAceitas ind <= 1.0
+                    && relevanciaDocenteMedia ind >= 0.0 && relevanciaDocenteMedia ind <= 1.0
+
+testeAvaliacaoRecomendacoes :: IO Bool
+testeAvaliacaoRecomendacoes = do
+    putStrLn "Executando avaliacao pedagogica das recomendacoes..."
+    let mapaProbs = Map.fromList
+            [ (Adicao,        0.96)
+            , (Subtracao,     0.88)
+            , (Multiplicacao, 0.58)
+            , (Divisao,       0.32)
+            ]
+        recs = gerarRecomendacoesOrdenadas limiaresPadrao grafoPadraoMatematica mapaProbs
+        ind  = avaliarSistemaRecomendacao
+            grafoPadraoMatematica
+            0.75
+            mapaProbs
+            recs
+            [1.0, 0.9, 1.0, 0.95]
+            [True, True, False, True]
+            [(58.0, 74.0), (32.0, 50.0)]
+        ok = adequacaoPedagogica ind == 1.0
+            && diversidadeRecomendacoes ind == 1.0
+            && taxaRecomendacoesAceitas ind == 0.75
+            && abs (evolucaoMediaObservada ind - 17.0) < 1e-9
+            && not (null (observacaoMetodologica ind))
+    putStrLn ("  Adequacao=" ++ show (adequacaoPedagogica ind) ++ " Diversidade=" ++ show (diversidadeRecomendacoes ind) ++ " Aceitacao=" ++ show (taxaRecomendacoesAceitas ind))
+    pure ok
+
 main :: IO ()
 main = do
     hSetEncoding stdout utf8
@@ -285,12 +324,14 @@ main = do
         , quickCheckResult prop_nivelDificuldadeLimites
         , quickCheckResult prop_ordenacaoPreservaElementos
         , quickCheckResult prop_metricasLimites
+        , quickCheckResult prop_indicadoresRecomendacaoLimites
         ]
     okIntegracao <- testeIntegracaoSampleCSV
     okRecomendacao <- testeRecomendacaoSecao11
     okAvaliacao <- testeAvaliacaoECalibracao
     okBaseline <- testeComparacaoBaseline
-    if all isSuccess resultadosQC && okIntegracao && okRecomendacao && okAvaliacao && okBaseline
+    okEvalRec <- testeAvaliacaoRecomendacoes
+    if all isSuccess resultadosQC && okIntegracao && okRecomendacao && okAvaliacao && okBaseline && okEvalRec
         then do
             putStrLn "Todos os testes matematicos, computacionais, de recomendacao e avaliacao passaram!"
             exitSuccess

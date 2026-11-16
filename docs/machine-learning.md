@@ -91,4 +91,22 @@ Ambos os modelos foram avaliados sobre a **mesma divisão agrupada por estudante
 - **Ganhos da Regressão Logística:** Mesmo quando as métricas discretas de classificação empatam em cenários simples, a combinação multivariada (`X1`–`X6`) reduz substancialmente o **Log Loss**, entregando probabilidades muito mais calibradas para alimentar as faixas do recomendador híbrido (`< 0.50`, `0.50–0.75`, `>= 0.75`) e permitindo capturar evolução recente (`X5`) e desempenho nos pré-requisitos (`X4`).
 - **Limitações identificadas:** O conjunto inicial possui apenas 31 amostras simuladas (apenas 2 estudantes / 6 amostras no conjunto de Teste) e separabilidade linear alta. Para validar poder preditivo em cenários com ruído e casos fronteiriços reais, será necessário repetir este protocolo comparativo com dados reais anonimizados em estudos futuros.
 
+---
+
+## 7. Protocolo de Avaliação Pedagógica das Recomendações (Passo 5.3 — Seção 17.2)
+
+Além das métricas estatísticas do modelo preditivo, a qualidade educacional das recomendações produzidas pelo `EduMind` é avaliada pelos 5 critérios abaixo, com suporte computacional implementado em `Evaluation.Metrics.avaliarSistemaRecomendacao`:
+
+| Critério | Instrumento / Fórmula | Protocolo de Coleta e Supervisão |
+| :--- | :--- | :--- |
+| **1. Relevância das atividades recomendadas** | Média das avaliações docentes normalizadas em $[0, 1]$ (`relevanciaDocenteMedia`) | Professores de Matemática revisam e aprovam/sinalizam recomendações diretamente no `TeacherDashboard` (`RF12`), verificando utilidade didática. |
+| **2. Adequação pedagógica** | Proporção de recomendações compatíveis com o grafo de pré-requisitos (`calcularAdequacaoPedagogica`) | Verificação automatizada de que conteúdos com pré-requisitos pendentes não recebem recomendação prematura de avanço (`avancar`) e de que o nível sugerido (`1`–`5`) evita saltos bruscos. |
+| **3. Diversidade das recomendações** | Razão entre conteúdos distintos e total recomendado (`calcularDiversidadeRecomendacoes`) | Evitar recomendação repetitiva do mesmo item quando o estudante já demonstrou evolução ou possui outros tópicos elegíveis. |
+| **4. Taxa de recomendações aceitas** | Proporção de recomendações efetivamente realizadas (`calcularTaxaAceitacao`) | Cruzamento entre o histórico salvo em `recomendacoes` e as execuções registradas em `respostas`. |
+| **5. Evolução do desempenho após recomendações** | Diferença média pós − pré (`calcularEvolucaoObservada`) | Comparação longitudinal controlada entre grupos/momentos de estudo. |
+
+### Salvaguarda Metodológica sobre Causalidade
+Conforme exigido na Seção 17.2 da especificação oficial, uma melhora de pontuação após o recebimento de recomendações (`evolucaoMediaObservada > 0`) **não deve ser interpretada automaticamente como relação causal direta**, pois fatores externos (aulas presenciais, estudo paralelo, maturação ou regressão à média) também influenciam o aprendizado. Estudos de impacto causal exigem delineamento controlado (ex.: grupo de comparação ou acompanhamento pedagógico supervisionado).
+
+
 
