@@ -4,6 +4,7 @@ import Control.Exception (IOException, try)
 import qualified Data.Map.Strict as Map
 import Data.Preprocessing
 import Data.Types
+import Evaluation.Metrics
 import Models.LogisticRegression
 import Models.Training
 import Recommendation.Prerequisites
@@ -195,6 +196,54 @@ testeRecomendacaoSecao11 = do
     putStrLn ("  Ordem cenario 11.1: " ++ show ordemConteudos)
     pure ok
 
+prop_metricasLimites :: Property
+prop_metricasLimites =
+    forAll (choose (1 :: Int, 30)) $ \n ->
+        forAll (vectorOf n (liftArbitraryPar)) $ \pares ->
+            forAll (choose (0.1, 0.9)) $ \limiar ->
+                let rel = avaliarPrevisoes limiar pares
+                    mat = matrizConfusao rel
+                    somaMat = vp mat + vn mat + fp mat + fn mat
+                    faixas = curvaCalibracao 5 pares
+                    somaFaixas = sum (map quantidadeAmostras faixas)
+                in somaMat == length pares
+                    && somaFaixas == length pares
+                    && accuracy rel >= 0.0 && accuracy rel <= 1.0
+                    && precision rel >= 0.0 && precision rel <= 1.0
+                    && recall rel >= 0.0 && recall rel <= 1.0
+                    && f1Score rel >= 0.0 && f1Score rel <= 1.0
+                    && logLoss rel >= 0.0 && not (isInfinite (logLoss rel))
+  where
+    liftArbitraryPar = do
+        y <- elements [0.0, 1.0]
+        p <- choose (0.0, 1.0)
+        pure (y, p)
+
+testeAvaliacaoECalibracao :: IO Bool
+testeAvaliacaoECalibracao = do
+    putStrLn "Executando avaliacao e calibracao em validacao/teste..."
+    resCsv <- carregarSampleCSV
+    case resCsv of
+        Left err -> do
+            putStrLn ("FALHA ao carregar sample.csv: " ++ err)
+            pure False
+        Right registros -> do
+            let prep = prepararConjuntosTreino registros
+                treinado@(ModeloLogistico ws b) = treinarAmostras configTreinoPadrao (amostrasTreino prep)
+                paresVal = [(amostraDominio a, prever ws (amostraFeatures a) b) | a <- amostrasValidacao prep]
+                limiaresCal = calibrarLimiaresRecomendacao paresVal
+                relVal = avaliarModeloEmAmostras (limiarDominio limiaresCal) treinado (amostrasValidacao prep)
+                relTeste = avaliarModeloEmAmostras (limiarDominio limiaresCal) treinado (amostrasTeste prep)
+                faixas = curvaCalibracao 4 paresVal
+                ok = limiarReforco limiaresCal < limiarDominio limiaresCal
+                    && accuracy relVal >= 0.0 && accuracy relTeste >= 0.0
+                    && f1Score relVal >= 0.0 && f1Score relTeste >= 0.0
+                    && not (null faixas)
+            putStrLn ("  Limiares calibrados na validacao: " ++ show limiaresCal)
+            putStrLn ("  Metricas validacao: Acc=" ++ show (accuracy relVal) ++ ", F1=" ++ show (f1Score relVal) ++ ", LogLoss=" ++ show (logLoss relVal))
+            putStrLn ("  Metricas teste:     Acc=" ++ show (accuracy relTeste) ++ ", F1=" ++ show (f1Score relTeste) ++ ", LogLoss=" ++ show (logLoss relTeste))
+            pure ok
+
 main :: IO ()
 main = do
     hSetEncoding stdout utf8
@@ -209,12 +258,14 @@ main = do
         , quickCheckResult prop_normalizacaoSemNaN
         , quickCheckResult prop_nivelDificuldadeLimites
         , quickCheckResult prop_ordenacaoPreservaElementos
+        , quickCheckResult prop_metricasLimites
         ]
     okIntegracao <- testeIntegracaoSampleCSV
     okRecomendacao <- testeRecomendacaoSecao11
-    if all isSuccess resultadosQC && okIntegracao && okRecomendacao
+    okAvaliacao <- testeAvaliacaoECalibracao
+    if all isSuccess resultadosQC && okIntegracao && okRecomendacao && okAvaliacao
         then do
-            putStrLn "Todos os testes matematicos, computacionais e de recomendacao passaram!"
+            putStrLn "Todos os testes matematicos, computacionais, de recomendacao e avaliacao passaram!"
             exitSuccess
         else do
             putStrLn "Falha em um ou mais testes."
