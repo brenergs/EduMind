@@ -1,0 +1,45 @@
+cabal-version:      3.0
+name:               edumind-ai
+version:            0.1.0.0
+synopsis:           Nucleo de Machine Learning e Recomendacao do EduMind
+license:            MIT
+build-type:         Simple
+
+flag use-hmatrix
+    description:    Habilita dependencia hmatrix (requer BLAS/LAPACK nativos)
+    default:        False
+    manual:         True
+
+library
+    hs-source-dirs:   src
+    default-language: GHC2021
+    exposed-modules:
+        Data.Types
+        Data.Preprocessing
+        Data.Features
+        Models.LogisticRegression
+        Models.Training
+        Recommendation.Prerequisites
+        Recommendation.Scoring
+        Evaluation.Metrics
+    build-depends:
+        base       >= 4.16 && < 5,
+        aeson      >= 2.1,
+        bytestring >= 0.11,
+        cassava    >= 0.5,
+        containers >= 0.6,
+        vector     >= 0.13
+    if flag(use-hmatrix)
+        build-depends:
+            hmatrix >= 0.20
+
+test-suite edumind-ai-test
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Spec.hs
+    default-language: GHC2021
+    build-depends:
+        base       >= 4.16 && < 5,
+        edumind-ai,
+        QuickCheck >= 2.14
+
