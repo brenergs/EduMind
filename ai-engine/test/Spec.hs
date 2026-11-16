@@ -244,6 +244,32 @@ testeAvaliacaoECalibracao = do
             putStrLn ("  Metricas teste:     Acc=" ++ show (accuracy relTeste) ++ ", F1=" ++ show (f1Score relTeste) ++ ", LogLoss=" ++ show (logLoss relTeste))
             pure ok
 
+testeComparacaoBaseline :: IO Bool
+testeComparacaoBaseline = do
+    putStrLn "Executando comparacao ML vs. baseline baseado em regras..."
+    resCsv <- carregarSampleCSV
+    case resCsv of
+        Left err -> do
+            putStrLn ("FALHA ao carregar sample.csv: " ++ err)
+            pure False
+        Right registros -> do
+            let resultado = treinarPipelineCompleto "1.0-cmp" configTreinoPadrao registros
+                cmp = compararComBaseline (limiarDominio limiaresPadrao) (modelo (artefato resultado)) registros
+                mlT = metricasTesteML cmp
+                bsT = metricasTesteBaseline cmp
+                mlV = metricasValidacaoML cmp
+                bsV = metricasValidacaoBaseline cmp
+                ok = totalAmostras mlT == totalAmostras bsT
+                    && totalAmostras mlV == totalAmostras bsV
+                    && totalAmostras mlT > 0
+                    && logLoss mlT <= logLoss bsT
+            putStrLn ("  [Validacao] ML       -> Acc=" ++ show (accuracy mlV) ++ " Prec=" ++ show (precision mlV) ++ " Rec=" ++ show (recall mlV) ++ " F1=" ++ show (f1Score mlV) ++ " LogLoss=" ++ show (logLoss mlV))
+            putStrLn ("  [Validacao] Baseline -> Acc=" ++ show (accuracy bsV) ++ " Prec=" ++ show (precision bsV) ++ " Rec=" ++ show (recall bsV) ++ " F1=" ++ show (f1Score bsV) ++ " LogLoss=" ++ show (logLoss bsV))
+            putStrLn ("  [Teste]     ML       -> Acc=" ++ show (accuracy mlT) ++ " Prec=" ++ show (precision mlT) ++ " Rec=" ++ show (recall mlT) ++ " F1=" ++ show (f1Score mlT) ++ " LogLoss=" ++ show (logLoss mlT))
+            putStrLn ("  [Teste]     Baseline -> Acc=" ++ show (accuracy bsT) ++ " Prec=" ++ show (precision bsT) ++ " Rec=" ++ show (recall bsT) ++ " F1=" ++ show (f1Score bsT) ++ " LogLoss=" ++ show (logLoss bsT))
+            putStrLn ("  Ganho Acc=" ++ show (ganhoAccuracyTeste cmp) ++ " Ganho F1=" ++ show (ganhoF1Teste cmp) ++ " Reducao LogLoss=" ++ show (reducaoLogLossTeste cmp))
+            pure ok
+
 main :: IO ()
 main = do
     hSetEncoding stdout utf8
@@ -263,7 +289,8 @@ main = do
     okIntegracao <- testeIntegracaoSampleCSV
     okRecomendacao <- testeRecomendacaoSecao11
     okAvaliacao <- testeAvaliacaoECalibracao
-    if all isSuccess resultadosQC && okIntegracao && okRecomendacao && okAvaliacao
+    okBaseline <- testeComparacaoBaseline
+    if all isSuccess resultadosQC && okIntegracao && okRecomendacao && okAvaliacao && okBaseline
         then do
             putStrLn "Todos os testes matematicos, computacionais, de recomendacao e avaliacao passaram!"
             exitSuccess

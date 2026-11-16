@@ -4,6 +4,7 @@ module Evaluation.Metrics
     ( MatrizConfusao(..)
     , RelatorioMetricas(..)
     , FaixaCalibracao(..)
+    , ComparativoBaseline(..)
     , calcularMatrizConfusao
     , calcularAccuracy
     , calcularPrecision
@@ -15,11 +16,21 @@ module Evaluation.Metrics
     , calibrarLimiarDominio
     , calibrarLimiaresRecomendacao
     , curvaCalibracao
+    , preverBaselineRegras
+    , avaliarBaselineRegistros
+    , compararComBaseline
     ) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.List (foldl', maximumBy)
 import Data.Ord (comparing)
+import Data.Preprocessing
+    ( ConjuntosPreparados(..)
+    , DivisaoDados(..)
+    , RegistroCSV(..)
+    , dividirPorEstudante
+    , prepararConjuntosTreino
+    )
 import Data.Types (AmostraTreino(..))
 import GHC.Generics (Generic)
 import Models.LogisticRegression (ModeloLogistico(..), perdaMedia, prever)
@@ -59,6 +70,19 @@ data FaixaCalibracao = FaixaCalibracao
 
 instance ToJSON FaixaCalibracao
 instance FromJSON FaixaCalibracao
+
+data ComparativoBaseline = ComparativoBaseline
+    { metricasValidacaoML       :: RelatorioMetricas
+    , metricasTesteML           :: RelatorioMetricas
+    , metricasValidacaoBaseline :: RelatorioMetricas
+    , metricasTesteBaseline     :: RelatorioMetricas
+    , ganhoAccuracyTeste        :: Double
+    , ganhoF1Teste              :: Double
+    , reducaoLogLossTeste       :: Double
+    } deriving (Show, Eq, Generic)
+
+instance ToJSON ComparativoBaseline
+instance FromJSON ComparativoBaseline
 
 calcularMatrizConfusao :: Double -> [(Double, Double)] -> MatrizConfusao
 calcularMatrizConfusao limiar = foldl' contar (MatrizConfusao 0 0 0 0)
@@ -172,3 +196,36 @@ curvaCalibracao nFaixasBruto pares =
   where
     nFaixas = max 1 nFaixasBruto
     passo   = 1.0 / fromIntegral nFaixas
+
+-- | Baseline determinístico simples baseado apenas em desempenho_anterior / 100.0
+-- (classificação positiva quando notaAnterior >= 70.0, i.e., limiar 0.70).
+preverBaselineRegras :: RegistroCSV -> Double
+preverBaselineRegras r = max 0.0 (min 1.0 (regDesempenhoAnterior r / 100.0))
+
+avaliarBaselineRegistros :: Double -> [RegistroCSV] -> RelatorioMetricas
+avaliarBaselineRegistros limiarBaseline regs =
+    avaliarPrevisoes
+        limiarBaseline
+        [ (regDominio r, preverBaselineRegras r)
+        | r <- regs
+        ]
+
+-- | Compara o modelo de Regressão Logística com o baseline baseado em regras
+-- sobre a mesma divisão agrupada por estudante (Validação e Teste).
+compararComBaseline :: Double -> ModeloLogistico -> [RegistroCSV] -> ComparativoBaseline
+compararComBaseline limiarML modelo registros =
+    let divisao   = dividirPorEstudante registros
+        prep      = prepararConjuntosTreino registros
+        mlVal     = avaliarModeloEmAmostras limiarML modelo (amostrasValidacao prep)
+        mlTeste   = avaliarModeloEmAmostras limiarML modelo (amostrasTeste prep)
+        baseVal   = avaliarBaselineRegistros 0.70 (registrosValidacao divisao)
+        baseTeste = avaliarBaselineRegistros 0.70 (registrosTeste divisao)
+    in ComparativoBaseline
+        { metricasValidacaoML       = mlVal
+        , metricasTesteML           = mlTeste
+        , metricasValidacaoBaseline = baseVal
+        , metricasTesteBaseline     = baseTeste
+        , ganhoAccuracyTeste        = accuracy mlTeste - accuracy baseTeste
+        , ganhoF1Teste              = f1Score mlTeste - f1Score baseTeste
+        , reducaoLogLossTeste       = logLoss baseTeste - logLoss mlTeste
+        }

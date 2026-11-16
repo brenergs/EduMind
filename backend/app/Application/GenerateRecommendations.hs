@@ -29,6 +29,7 @@ import Domain.Recommendation
     , TrainModelRequestDTO(..)
     , TrainModelResponseDTO(..)
     )
+import Evaluation.Metrics (ComparativoBaseline(..), compararComBaseline)
 import Infrastructure.Database
     ( AtividadeRow(..)
     , ConteudoRow(..)
@@ -65,7 +66,8 @@ import Recommendation.Prerequisites
     , sequenciaPedagogicaPadrao
     )
 import Recommendation.Scoring
-    ( gerarRecomendacoesOrdenadas
+    ( LimiaresRecomendacao(..)
+    , gerarRecomendacoesOrdenadas
     , limiaresPadrao
     , nivelDificuldadeSugerido
     )
@@ -157,11 +159,19 @@ treinarModeloCasoDeUso pool mReq = do
                     , regularizacaoL2 = maybe (regularizacaoL2 configTreinoPadrao) (fromMaybe (regularizacaoL2 configTreinoPadrao) . trainReqL2) mReq
                     }
                 resultado = treinarPipelineCompleto (T.unpack versao) cfg registros
+                comparativo = compararComBaseline (limiarDominio limiaresPadrao) (modelo (artefato resultado)) registros
                 paramsJsonText = lazyBytesParaText (serializarArtefato (artefato resultado))
                 metricasJsonText = lazyBytesParaText $ encode $ object
-                    [ "train_loss"      .= perdaTreino resultado
-                    , "validation_loss" .= perdaValidacao resultado
-                    , "test_loss"       .= perdaTeste resultado
+                    [ "train_loss"             .= perdaTreino resultado
+                    , "validation_loss"        .= perdaValidacao resultado
+                    , "test_loss"              .= perdaTeste resultado
+                    , "ml_validation"          .= metricasValidacaoML comparativo
+                    , "ml_test"                .= metricasTesteML comparativo
+                    , "baseline_validation"    .= metricasValidacaoBaseline comparativo
+                    , "baseline_test"          .= metricasTesteBaseline comparativo
+                    , "ganho_accuracy_teste"   .= ganhoAccuracyTeste comparativo
+                    , "ganho_f1_teste"         .= ganhoF1Teste comparativo
+                    , "reducao_logloss_teste"  .= reducaoLogLossTeste comparativo
                     ]
             _ <- salvarModelo pool "RegressaoLogistica" versao paramsJsonText metricasJsonText
             pure $ Right TrainModelResponseDTO
