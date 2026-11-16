@@ -107,3 +107,4 @@ INSERT INTO pre_requisitos (conteudo_id, pre_requisito_id) VALUES
     (3, 2), -- Multiplicação requer Subtração
     (4, 3)  -- Divisão requer Multiplicação
 ON CONFLICT DO NOTHING;
+
