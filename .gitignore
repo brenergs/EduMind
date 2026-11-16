@@ -1,0 +1,51 @@
+# Haskell / Cabal / GHC
+dist/
+dist-*
+dist-newstyle/
+.ghc.environment*
+cabal.project.local
+cabal.project.local~
+.cabal-sandbox/
+cabal.sandbox.config
+*.o
+*.hi
+*.dyn_o
+*.dyn_hi
+.hpc/
+.tasty/
+
+# Node / React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+dist/
+build/
+.next/
+out/
+
+# Environment / Credentials
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# PostgreSQL / Docker data
+postgres_data/
+edumind_pgdata/
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Documentação
+DESENVOLVIMENTO.md
+EduMind — Sistema Inteligente de Recomendação e Personalização da Aprendizagem.pdf
