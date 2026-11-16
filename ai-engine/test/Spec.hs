@@ -6,6 +6,7 @@ import Data.Types
 import Models.LogisticRegression
 import Models.Training
 import System.Exit (exitFailure, exitSuccess)
+import System.IO (hSetEncoding, stdout, utf8)
 import Test.QuickCheck
 
 prop_sigmoidLimites :: Double -> Bool
@@ -63,7 +64,7 @@ gerarRegistro eid c nota t dom =
 
 prop_semVazamentoEstudante :: Property
 prop_semVazamentoEstudante =
-    forAll (choose (3, 15)) $ \numEstudantes ->
+    forAll (choose (3 :: Int, 15)) $ \numEstudantes ->
         forAll (elements [Adicao, Subtracao, Multiplicacao, Divisao]) $ \c ->
             let regs =
                     [ gerarRegistro ("stu_" ++ show idx) c (fromIntegral (idx * 7 `mod` 100)) (Just 25.0) (if even idx then 1.0 else 0.0)
@@ -98,7 +99,11 @@ carregarSampleCSV = do
     tentativaLocal <- try (carregarCSV "datasets/sample.csv") :: IO (Either IOException (Either String [RegistroCSV]))
     case tentativaLocal of
         Right res -> pure res
-        Left _    -> carregarCSV "ai-engine/datasets/sample.csv"
+        Left _    -> do
+            tentativaRaiz <- try (carregarCSV "ai-engine/datasets/sample.csv") :: IO (Either IOException (Either String [RegistroCSV]))
+            case tentativaRaiz of
+                Right res -> pure res
+                Left ex   -> pure (Left (show ex))
 
 testeIntegracaoSampleCSV :: IO Bool
 testeIntegracaoSampleCSV = do
@@ -136,7 +141,8 @@ testeIntegracaoSampleCSV = do
 
 main :: IO ()
 main = do
-    putStrLn "=== Testes QuickCheck — Nucleo de ML (EduMind) ==="
+    hSetEncoding stdout utf8
+    putStrLn "=== Testes QuickCheck - Nucleo de ML (EduMind) ==="
     resultadosQC <- sequence
         [ quickCheckResult prop_sigmoidLimites
         , quickCheckResult prop_sigmoidMonotonica
