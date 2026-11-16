@@ -67,3 +67,28 @@ Para garantir avaliação realista da capacidade de generalização do modelo:
   - Valores ausentes propositais em `tempo_medio_resolucao` para testar a etapa de imputação;
   - Variações de tempo (estudantes rápidos com baixa acurácia e estudantes mais lentos com alto domínio) para evitar viés simplista sobre `X6`.
 
+---
+
+## 6. Avaliação Comparativa: Regressão Logística vs. Baseline Baseado em Regras (Passo 5.2)
+
+### 6.1. Definição do Baseline
+Como referência determinística simples, implementou-se `preverBaselineRegras` em `ai-engine/src/Evaluation/Metrics.hs`, que utiliza exclusivamente `desempenho_anterior / 100.0` como pontuação estimada e classifica como domínio (`1`) quando `desempenho_anterior >= 70.0` (limiar `0.70`).
+
+Ambos os modelos foram avaliados sobre a **mesma divisão agrupada por estudante** de `ai-engine/datasets/sample.csv` (`stu_001`–`stu_007` no Treino, `stu_008` na Validação com 4 registros, e `stu_009`–`stu_010` no Teste com 6 registros).
+
+### 6.2. Resultados Observados (Dataset Simulado Inicial)
+
+| Conjunto | Modelo | Accuracy | Precision | Recall | F1-score | Log Loss |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Validação** (4 amostras) | Regressão Logística (`limiar = 0.75`) | `1.0000` | `1.0000` | `1.0000` | `1.0000` | `0.0227` |
+| **Validação** (4 amostras) | Baseline por Regras (`nota >= 70.0`) | `1.0000` | `1.0000` | `1.0000` | `1.0000` | `0.3301` |
+| **Teste** (6 amostras) | Regressão Logística (`limiar = 0.75`) | `1.0000` | `1.0000` | `1.0000` | `1.0000` | `0.0514` |
+| **Teste** (6 amostras) | Baseline por Regras (`nota >= 70.0`) | `1.0000` | `1.0000` | `1.0000` | `1.0000` | `0.3080` |
+
+- **Ganho no Teste:** `Δ Accuracy = 0.0000`, `Δ F1-score = 0.0000`, **Redução de Log Loss = `0.2567`** (`0.3080 → 0.0514`).
+
+### 6.3. Análise de Ganhos e Limitações
+- **Ganhos da Regressão Logística:** Mesmo quando as métricas discretas de classificação empatam em cenários simples, a combinação multivariada (`X1`–`X6`) reduz substancialmente o **Log Loss**, entregando probabilidades muito mais calibradas para alimentar as faixas do recomendador híbrido (`< 0.50`, `0.50–0.75`, `>= 0.75`) e permitindo capturar evolução recente (`X5`) e desempenho nos pré-requisitos (`X4`).
+- **Limitações identificadas:** O conjunto inicial possui apenas 31 amostras simuladas (apenas 2 estudantes / 6 amostras no conjunto de Teste) e separabilidade linear alta. Para validar poder preditivo em cenários com ruído e casos fronteiriços reais, será necessário repetir este protocolo comparativo com dados reais anonimizados em estudos futuros.
+
+
