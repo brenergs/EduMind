@@ -5,6 +5,11 @@ synopsis:           Nucleo de Machine Learning e Recomendacao do EduMind
 license:            MIT
 build-type:         Simple
 
+flag use-hmatrix
+    description:    Habilita dependencia hmatrix (requer BLAS/LAPACK nativos)
+    default:        False
+    manual:         True
+
 library
     hs-source-dirs:   src
     default-language: GHC2021
@@ -23,8 +28,10 @@ library
         bytestring >= 0.11,
         cassava    >= 0.5,
         containers >= 0.6,
-        hmatrix    >= 0.20,
         vector     >= 0.13
+    if flag(use-hmatrix)
+        build-depends:
+            hmatrix >= 0.20
 
 test-suite edumind-ai-test
     type:             exitcode-stdio-1.0
