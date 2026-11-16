@@ -2,6 +2,7 @@ module Recommendation.Prerequisites
     ( GrafoDependencias
     , sequenciaPedagogicaPadrao
     , grafoPadraoMatematica
+    , preRequisitosDe
     , preRequisitosPendentes
     , todosPreRequisitosDe
     , todosPreRequisitosPendentes
