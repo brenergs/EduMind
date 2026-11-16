@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: edumind-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: edumind
+      POSTGRES_USER: edumind_user
+      POSTGRES_PASSWORD: edumind_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - edumind_pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edumind_user -d edumind"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  edumind_pgdata:
+
