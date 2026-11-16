@@ -40,6 +40,7 @@ test-suite edumind-ai-test
     default-language: GHC2021
     build-depends:
         base       >= 4.16 && < 5,
+        containers >= 0.6,
         edumind-ai,
         QuickCheck >= 2.14
 

@@ -1,10 +1,13 @@
 module Main where
 
 import Control.Exception (IOException, try)
+import qualified Data.Map.Strict as Map
 import Data.Preprocessing
 import Data.Types
 import Models.LogisticRegression
 import Models.Training
+import Recommendation.Prerequisites
+import Recommendation.Scoring
 import System.Exit (exitFailure, exitSuccess)
 import System.IO (hSetEncoding, stdout, utf8)
 import Test.QuickCheck
@@ -139,10 +142,63 @@ testeIntegracaoSampleCSV = do
             putStrLn ("  Prob. exemplo:   " ++ show prob)
             pure ok
 
+prop_nivelDificuldadeLimites :: Property
+prop_nivelDificuldadeLimites =
+    forAll (choose (0.0, 1.0)) $ \p1 ->
+        forAll (choose (0.0, 1.0)) $ \p2 ->
+            let a = min p1 p2
+                b = max p1 p2
+                na = nivelDificuldadeSugerido a
+                nb = nivelDificuldadeSugerido b
+            in na >= 1 && na <= 5 && nb >= 1 && nb <= 5 && na <= nb
+
+prop_ordenacaoPreservaElementos :: Property
+prop_ordenacaoPreservaElementos =
+    forAll (vectorOf 4 (choose (0.0, 1.0))) $ \probs ->
+        let mapa = Map.fromList (zip sequenciaPedagogicaPadrao probs)
+            recs = gerarRecomendacoesOrdenadas limiaresPadrao grafoPadraoMatematica mapa
+            conteudos = map conteudoRecomendado recs
+        in length recs == 4
+            && all (`elem` conteudos) sequenciaPedagogicaPadrao
+
+testeRecomendacaoSecao11 :: IO Bool
+testeRecomendacaoSecao11 = do
+    putStrLn "Executando teste do sistema de recomendacao (cenario Secao 11.1)..."
+    let mapaProbs = Map.fromList
+            [ (Adicao,        0.96)
+            , (Subtracao,     0.88)
+            , (Multiplicacao, 0.58)
+            , (Divisao,       0.32)
+            ]
+        prereqsDivisao = todosPreRequisitosDe grafoPadraoMatematica Divisao
+        pendentesDiv   = todosPreRequisitosPendentes grafoPadraoMatematica 0.75 mapaProbs Divisao
+        ordenadas      = gerarRecomendacoesOrdenadas limiaresPadrao grafoPadraoMatematica mapaProbs
+        ordemConteudos = map conteudoRecomendado ordenadas
+        acoesPorItem   = [(conteudoRecomendado r, tipoAcao r) | r <- ordenadas]
+
+        mapaBaixo = Map.fromList
+            [ (Adicao,        0.40)
+            , (Subtracao,     0.35)
+            , (Multiplicacao, 0.25)
+            , (Divisao,       0.15)
+            ]
+        ordenadasBaixo = gerarRecomendacoesOrdenadas limiaresPadrao grafoPadraoMatematica mapaBaixo
+        ok = prereqsDivisao == [Adicao, Subtracao, Multiplicacao]
+            && pendentesDiv == [Multiplicacao]
+            && ordemConteudos == [Multiplicacao, Divisao, Adicao, Subtracao]
+            && lookup Multiplicacao acoesPorItem == Just "consolidacao"
+            && lookup Divisao acoesPorItem == Just "revisar_pre_requisitos"
+            && lookup Adicao acoesPorItem == Just "avancar"
+            && lookup Subtracao acoesPorItem == Just "avancar"
+            && map conteudoRecomendado ordenadasBaixo == [Adicao, Subtracao, Multiplicacao, Divisao]
+            && map tipoAcao ordenadasBaixo == ["reforco", "revisar_pre_requisitos", "revisar_pre_requisitos", "revisar_pre_requisitos"]
+    putStrLn ("  Ordem cenario 11.1: " ++ show ordemConteudos)
+    pure ok
+
 main :: IO ()
 main = do
     hSetEncoding stdout utf8
-    putStrLn "=== Testes QuickCheck - Nucleo de ML (EduMind) ==="
+    putStrLn "=== Testes QuickCheck - Nucleo de ML e Recomendacao (EduMind) ==="
     resultadosQC <- sequence
         [ quickCheckResult prop_sigmoidLimites
         , quickCheckResult prop_sigmoidMonotonica
@@ -151,11 +207,14 @@ main = do
         , quickCheckResult prop_gradienteReduzPerda
         , quickCheckResult prop_semVazamentoEstudante
         , quickCheckResult prop_normalizacaoSemNaN
+        , quickCheckResult prop_nivelDificuldadeLimites
+        , quickCheckResult prop_ordenacaoPreservaElementos
         ]
     okIntegracao <- testeIntegracaoSampleCSV
-    if all isSuccess resultadosQC && okIntegracao
+    okRecomendacao <- testeRecomendacaoSecao11
+    if all isSuccess resultadosQC && okIntegracao && okRecomendacao
         then do
-            putStrLn "Todos os testes matematicos e computacionais passaram!"
+            putStrLn "Todos os testes matematicos, computacionais e de recomendacao passaram!"
             exitSuccess
         else do
             putStrLn "Falha em um ou mais testes."
