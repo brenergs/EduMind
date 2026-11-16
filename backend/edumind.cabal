@@ -1,0 +1,52 @@
+cabal-version:      3.0
+name:               edumind
+version:            0.1.0.0
+synopsis:           Backend API REST e camada de aplicacao do EduMind
+license:            MIT
+build-type:         Simple
+
+flag use-servant
+    description:    Habilita servidor HTTP Servant/Warp/CORS
+    default:        False
+    manual:         True
+
+flag use-libpq
+    description:    Habilita postgresql-simple e resource-pool (requer libpq nativa)
+    default:        False
+    manual:         True
+
+executable edumind-backend
+    main-is:          Main.hs
+    hs-source-dirs:   app
+    default-language: GHC2021
+    other-modules:
+        API.Routes
+        Domain.Student
+        Domain.Content
+        Domain.Recommendation
+        Application.RegisterAnswer
+        Application.GenerateRecommendations
+        Infrastructure.Database
+    build-depends:
+        base       >= 4.16 && < 5,
+        edumind-ai,
+        aeson      >= 2.1,
+        bytestring >= 0.11,
+        containers >= 0.6,
+        process    >= 1.6,
+        stm        >= 2.5,
+        text       >= 2.0,
+        time       >= 1.12
+    if flag(use-servant)
+        cpp-options: -DUSE_SERVANT
+        build-depends:
+            servant        >= 0.19,
+            servant-server >= 0.19,
+            wai            >= 3.2,
+            wai-cors       >= 0.2,
+            warp           >= 3.3
+    if flag(use-libpq)
+        cpp-options: -DUSE_LIBPQ
+        build-depends:
+            postgresql-simple >= 0.6,
+            resource-pool     >= 0.4
